@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Varsha’s Simple Cycle Tracker</title>
+  <meta name="description" content="Ridiculously simple calendar-based menstrual tracker for Varsha. Cookie storage only." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .card { box-shadow: 0 10px 25px rgba(0,0,0,.08); }
+    .pill { border-radius: 9999px; }
+    .calendar-day { cursor: pointer; }
+    .calendar-day.selected { background-color: #60a5fa; color: white; border-radius: 9999px; }
+    .calendar-day.saved { position: relative; }
+    .calendar-day.saved::after { content: ""; position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); width: 6px; height: 6px; border-radius: 9999px; background: #2563eb; }
+  </style>
+</head>
+<body class="bg-blue-50 text-slate-800">
+  <header class="bg-blue-600 text-white">
+    <div class="max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
+      <h1 class="text-2xl font-semibold">Hi, Varsha ✿</h1>
+      <span class="text-sm opacity-90">Simple cycle tracker</span>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto p-4">
+    <!-- Status -->
+    <section class="card bg-white rounded-2xl p-5 mt-4">
+      <h2 class="text-xl font-semibold">Your cycle at a glance</h2>
+      <p id="statusLine" class="mt-2 text-slate-600"></p>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+          <div class="text-sm text-slate-600">Average cycle</div>
+          <div id="avgCycle" class="text-2xl font-bold">—</div>
+        </div>
+        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+          <div class="text-sm text-slate-600">Predicted next start</div>
+          <div id="predictedStart" class="text-2xl font-bold">—</div>
+        </div>
+        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+          <div class="text-sm text-slate-600">Days until next</div>
+          <div id="daysUntil" class="text-2xl font-bold">—</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Calendar + actions -->
+    <section class="card bg-white rounded-2xl p-5 mt-6">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">Pick your period start date</h2>
+        <div class="flex items-center gap-2">
+          <button id="prevMonth" class="pill px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700">◀</button>
+          <div id="monthLabel" class="min-w-[160px] text-center font-medium"></div>
+          <button id="nextMonth" class="pill px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700">▶</button>
+          <button id="todayBtn" class="pill px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800">Today</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-7 gap-1 mt-3 text-center text-xs text-slate-500">
+        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+      </div>
+      <div id="calendar" class="grid grid-cols-7 gap-1 mt-1"></div>
+
+      <div class="mt-4 flex gap-3">
+        <button id="saveBtn" class="pill bg-blue-600 hover:bg-blue-700 text-white px-5 py-2">Save date</button>
+        <button id="clearBtn" class="pill bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2">Clear all</button>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">Tip: you can’t pick a future date.</p>
+    </section>
+
+    <!-- History -->
+    <section class="card bg-white rounded-2xl p-5 mt-6">
+      <h2 class="text-xl font-semibold">History</h2>
+      <div id="history" class="mt-4 space-y-3"></div>
+    </section>
+
+    <footer class="text-center text-xs text-slate-500 my-8">
+      Built for Varsha • Fully offline • Cookie‑only storage
+    </footer>
+  </main>
+
+  <script>
+    const COOKIE_NAME = 'vt_cycle_data';
+    const COOKIE_DAYS = 400;
+    const state = { cycles: [], selectedDate: null, view: currentYM() };
+
+    function currentYM(){ const t=new Date(); return { y:t.getFullYear(), m:t.getMonth() }; }
+
+    // --- cookie helpers ---
+    function setCookie(name, value, days){
+      const expires = new Date(Date.now() + days*24*60*60*1000).toUTCString();
+      const secure = location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = `${name}=${encodeURIComponent(value)}; Expires=${expires}; Path=/; SameSite=Lax${secure}`;
+    }
+    function getCookie(name){
+      return document.cookie.split('; ').reduce((acc, cur)=>{
+        const [k, v] = cur.split('=');
+        return k === name ? decodeURIComponent(v) : acc;
+      }, '');
+    }
+    function delCookie(name){
+      const secure = location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+      document.cookie = `${name}=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; SameSite=Lax${secure}`;
+    }
+
+    function saveData(){
+      // keep last 12 to fit cookie size
+      if(state.cycles.length>12) state.cycles.splice(0, state.cycles.length-12);
+      setCookie(COOKIE_NAME, JSON.stringify({ cycles: state.cycles }), COOKIE_DAYS);
+      renderStatus();
+      renderHistory();
+      renderCalendar();
+    }
+    function loadData(){
+      const raw = getCookie(COOKIE_NAME);
+      if(!raw) return;
+      try {
+        const obj = JSON.parse(raw);
+        if(Array.isArray(obj.cycles)){
+          state.cycles = obj.cycles
+            .filter(Boolean)
+            .map(d=>fmtDateISO(d))
+            .sort((a,b)=> a.localeCompare(b));
+        }
+      } catch {}
+    }
+
+    // --- date utils ---
+    function fmtDateISO(d){ return new Date(d).toISOString().slice(0,10); }
+    function fmtDateHuman(d){ const dd = new Date(d); return dd.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
+    function daysBetween(a,b){ const ms=24*60*60*1000; return Math.floor((new Date(b)-new Date(a))/ms); }
+
+    function computeAvgCycle(){
+      if(state.cycles.length < 2) return 28;
+      const diffs = [];
+      for(let i=1;i<state.cycles.length;i++) diffs.push(daysBetween(state.cycles[i-1], state.cycles[i]));
+      const avg = Math.round(diffs.reduce((a,b)=>a+b,0)/diffs.length);
+      return Math.max(15, Math.min(60, avg)); // keep within a sane range
+    }
+
+    function predictNextStart(){
+      if(!state.cycles.length) return null;
+      const avg = computeAvgCycle();
+      const last = new Date(state.cycles[state.cycles.length-1]);
+      last.setDate(last.getDate() + avg);
+      return fmtDateISO(last);
+    }
+
+    function renderStatus(){
+      const avg = computeAvgCycle();
+      const next = predictNextStart();
+      const today = new Date();
+      let status = 'Add at least one date to see predictions.';
+      if(next){
+        const d = daysBetween(today, next);
+        document.getElementById('avgCycle').textContent = avg + ' days';
+        document.getElementById('predictedStart').textContent = fmtDateHuman(next);
+        document.getElementById('daysUntil').textContent = (d >= 0 ? d : 0) + ' days';
+        status = d >= 0
+          ? `Likely next period around ${fmtDateHuman(next)} (about ${d} day${d===1?'':'s'} left).`
+          : `Next period prediction was ${fmtDateHuman(next)} (overdue by ${Math.abs(d)} day${Math.abs(d)===1?'':'s'}).`;
+      } else {
+        document.getElementById('avgCycle').textContent = '—';
+        document.getElementById('predictedStart').textContent = '—';
+        document.getElementById('daysUntil').textContent = '—';
+      }
+      document.getElementById('statusLine').textContent = status;
+    }
+
+    function renderHistory(){
+      const wrap = document.getElementById('history');
+      wrap.innerHTML = '';
+      if(!state.cycles.length){
+        wrap.innerHTML = '<div class="text-slate-600 text-sm">No cycles yet.</div>';
+        return;
+      }
+      state.cycles.forEach((d, i)=>{
+        const div = document.createElement('div');
+        div.className = 'bg-blue-50 border border-blue-200 rounded-2xl p-4 flex justify-between';
+        div.innerHTML = `<div>Cycle ${i+1}: ${fmtDateHuman(d)}</div>`;
+        wrap.appendChild(div);
+      });
+    }
+
+    function renderCalendar(){
+      const y = state.view.y, m = state.view.m;
+      const cal = document.getElementById('calendar');
+      cal.innerHTML = '';
+      document.getElementById('monthLabel').textContent = new Date(y, m, 1).toLocaleDateString(undefined,{month:'long', year:'numeric'});
+
+      const firstDow = new Date(y, m, 1).getDay();
+      const daysInMonth = new Date(y, m+1, 0).getDate();
+      // leading blanks
+      for(let i=0;i<firstDow;i++) cal.appendChild(document.createElement('div'));
+      const today = new Date();
+      for(let d=1; d<=daysInMonth; d++){
+        const dateISO = fmtDateISO(new Date(y, m, d));
+        const cell = document.createElement('div');
+        const isFuture = new Date(dateISO) > new Date(fmtDateISO(today));
+        const isSaved = state.cycles.includes(dateISO);
+        cell.className = 'calendar-day text-center p-2 rounded hover:bg-blue-100' + (isSaved?' saved':'');
+        cell.textContent = d;
+        if(isFuture){ cell.classList.add('opacity-40', 'cursor-not-allowed'); }
+        if(state.selectedDate === dateISO) cell.classList.add('selected');
+        cell.addEventListener('click', ()=>{
+          if(isFuture){ alert('You can\'t pick a future date.'); return; }
+          document.querySelectorAll('.calendar-day').forEach(c=>c.classList.remove('selected'));
+          cell.classList.add('selected');
+          state.selectedDate = dateISO;
+        });
+        cal.appendChild(cell);
+      }
+    }
+
+    // --- controls ---
+    document.getElementById('prevMonth').addEventListener('click', ()=>{
+      state.view.m -= 1; if(state.view.m < 0){ state.view.m = 11; state.view.y -= 1; } renderCalendar();
+    });
+    document.getElementById('nextMonth').addEventListener('click', ()=>{
+      state.view.m += 1; if(state.view.m > 11){ state.view.m = 0; state.view.y += 1; } renderCalendar();
+    });
+    document.getElementById('todayBtn').addEventListener('click', ()=>{ state.view = currentYM(); renderCalendar(); });
+
+    document.getElementById('saveBtn').addEventListener('click', ()=>{
+      if(!state.selectedDate){ alert('Please pick a date.'); return; }
+      if(!state.cycles.includes(state.selectedDate)) state.cycles.push(state.selectedDate);
+      state.cycles.sort((a,b)=> a.localeCompare(b));
+      saveData();
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', ()=>{
+      if(!confirm('Clear all saved data?')) return;
+      state.cycles = []; state.selectedDate = null;
+      delCookie(COOKIE_NAME);
+      renderStatus();
+      renderHistory();
+      renderCalendar();
+    });
+
+    // init
+    loadData();
+    renderStatus();
+    renderHistory();
+    renderCalendar();
+  </script>
+</body>
+</html>
