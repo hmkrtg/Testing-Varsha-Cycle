@@ -6,6 +6,7 @@
   <title>Varsha’s Cycle Tracker</title>
   <meta name="description" content="Simple calendar tracker for Varsha with multi‑month predictions, fertility labels, stats, and mobile‑friendly UI. Cookie storage only." />
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="manifest" href="/manifest.webmanifest">
   <style>
     :root{ --blue:#2563eb; --blue50:#eff6ff; --red:#ef4444; --green:#16a34a; }
     .card { box-shadow: 0 10px 25px rgba(0,0,0,.08); }
@@ -308,5 +309,15 @@
     loadData();
     renderAll();
   </script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => console.log('Service Worker registered:', reg))
+        .catch(err => console.error('Service Worker registration failed:', err));
+    });
+  }
+</script>
+
 </body>
 </html>
