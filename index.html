@@ -4,96 +4,104 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Varsha’s Cycle Tracker</title>
-  <meta name="description" content="Simple calendar tracker for Varsha with 3‑month predictions and fertility likelihood labels (L/N/H). Cookie storage only." />
+  <meta name="description" content="Simple calendar tracker for Varsha with multi‑month predictions, fertility labels, stats, and mobile‑friendly UI. Cookie storage only." />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    :root{ --blue:#2563eb; --blue50:#eff6ff; --red:#ef4444; --green:#16a34a; }
     .card { box-shadow: 0 10px 25px rgba(0,0,0,.08); }
     .pill { border-radius: 9999px; }
-    .calendar-day { cursor: pointer; position: relative; }
-    .calendar-day.selected { background-color: #60a5fa; color: white; border-radius: 12px; }
-    .calendar-day.saved { position: relative; }
-    .calendar-day.saved::after { content: ""; position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); width: 6px; height: 6px; border-radius: 9999px; background: #2563eb; }
+    .calendar-day { cursor: pointer; position: relative; min-height: 46px; display:flex; align-items:center; justify-content:center; }
+    @media (max-width: 420px){ .calendar-day{ min-height: 40px; } }
+    .calendar-day.selected { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 10px; }
+    .calendar-day.saved::after { content: ""; position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); width: 6px; height: 6px; border-radius: 9999px; background: var(--blue); }
     .badge { position:absolute; top:2px; left:4px; font-size:10px; line-height:1; padding:2px 4px; border-radius:9999px; background:#e5e7eb; color:#111827; }
     .badge.H { background:#dcfce7; }
     .badge.N { background:#e0e7ff; }
     .badge.L { background:#f3f4f6; }
+    /* Predicted period shading */
+    .pred-period { background: rgba(239,68,68,.10); border-radius: 10px; }
+    /* Predicted ovulation dot */
+    .ov-dot::before{ content:""; position:absolute; right:6px; top:6px; width:6px; height:6px; border-radius:9999px; background: var(--green); }
+    /* Mobile layout tweaks */
+    .stat-pill{ background:var(--blue50); border:1px solid #bfdbfe; padding:.4rem .6rem; border-radius:9999px; font-size:.85rem; }
+    .tap-help{ position:sticky; bottom:0; left:0; right:0; background:white; border-top:1px solid #e5e7eb; padding:.5rem .75rem; }
   </style>
 </head>
 <body class="bg-blue-50 text-slate-800">
   <header class="bg-blue-600 text-white">
-    <div class="max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
-      <h1 class="text-2xl font-semibold">Hi, Varsha ✿</h1>
-      <span class="text-sm opacity-90">Simple cycle tracker</span>
+    <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+      <h1 class="text-xl sm:text-2xl font-semibold">Hi, Varsha ✿</h1>
+      <button id="todayBtn" class="pill px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm">Today</button>
     </div>
   </header>
 
-  <main class="max-w-3xl mx-auto p-4">
-    <!-- Status -->
-    <section class="card bg-white rounded-2xl p-5 mt-4">
-      <h2 class="text-xl font-semibold">Your cycle at a glance</h2>
-      <p id="statusLine" class="mt-2 text-slate-600"></p>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-          <div class="text-sm text-slate-600">Average cycle</div>
-          <div id="avgCycle" class="text-2xl font-bold">—</div>
+  <main class="max-w-3xl mx-auto p-3 sm:p-4">
+    <!-- Status + stats -->
+    <section class="card bg-white rounded-2xl p-4 sm:p-5 mt-3">
+      <h2 class="text-lg sm:text-xl font-semibold">Your cycle at a glance</h2>
+      <p id="statusLine" class="mt-2 text-slate-600 text-sm sm:text-base"></p>
+
+      <div class="grid grid-cols-3 gap-2 sm:gap-4 mt-3 sm:mt-4">
+        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-3 sm:p-4 text-center">
+          <div class="text-xs sm:text-sm text-slate-600">Average cycle</div>
+          <div id="avgCycle" class="text-lg sm:text-2xl font-bold">—</div>
         </div>
-        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-          <div class="text-sm text-slate-600">Predicted next start</div>
-          <div id="predictedStart" class="text-2xl font-bold">—</div>
+        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-3 sm:p-4 text-center">
+          <div class="text-xs sm:text-sm text-slate-600">Predicted next start</div>
+          <div id="predictedStart" class="text-lg sm:text-2xl font-bold">—</div>
         </div>
-        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-          <div class="text-sm text-slate-600">Days until next</div>
-          <div id="daysUntil" class="text-2xl font-bold">—</div>
+        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-3 sm:p-4 text-center">
+          <div class="text-xs sm:text-sm text-slate-600">Days until next</div>
+          <div id="daysUntil" class="text-lg sm:text-2xl font-bold">—</div>
         </div>
       </div>
 
-      <div class="mt-5">
+      <!-- Stats row -->
+      <div id="statsRow" class="flex flex-wrap gap-2 mt-3"></div>
+
+      <!-- Upcoming predictions -->
+      <div class="mt-4">
         <h3 class="font-semibold">Upcoming predictions (next 3)</h3>
         <ul id="upcomingList" class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2"></ul>
       </div>
 
-      <div class="mt-4 text-xs text-slate-600">
+      <div class="mt-3 text-xs text-slate-600">
         <div class="font-semibold mb-1">Fertility legend</div>
-        <div class="flex gap-3 items-center">
+        <div class="flex flex-wrap gap-3 items-center">
           <span class="badge H">H</span><span>High (around ovulation)</span>
           <span class="badge N">N</span><span>Normal (fertile window)</span>
           <span class="badge L">L</span><span>Low (outside fertile window)</span>
         </div>
-        <p class="mt-2">Note: This is a simple estimate using your average cycle length, assuming ovulation ~14 days before the next period. It’s not medical advice or birth control.</p>
+        <p class="mt-2">Note: This is a simple estimate using your average cycle length, assuming ovulation ~14 days before the next period. Not medical advice.</p>
       </div>
     </section>
 
     <!-- Calendar + actions -->
-    <section class="card bg-white rounded-2xl p-5 mt-6">
-      <div class="flex items-center justify-between">
-        <h2 class="text-xl font-semibold">Pick your period start date</h2>
+    <section class="card bg-white rounded-2xl p-4 sm:p-5 mt-4">
+      <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
-          <button id="prevMonth" class="pill px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700">◀</button>
-          <div id="monthLabel" class="min-w-[160px] text-center font-medium"></div>
-          <button id="nextMonth" class="pill px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700">▶</button>
-          <button id="todayBtn" class="pill px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800">Today</button>
+          <button id="prevMonth" class="pill px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm">◀</button>
+          <div id="monthLabel" class="min-w-[160px] text-center font-medium text-sm sm:text-base"></div>
+          <button id="nextMonth" class="pill px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm">▶</button>
         </div>
+        <div class="text-xs text-slate-500">Tap a day to save as start</div>
       </div>
 
-      <div class="grid grid-cols-7 gap-1 mt-3 text-center text-xs text-slate-500">
+      <div class="grid grid-cols-7 gap-1 mt-3 text-center text-[10px] sm:text-xs text-slate-500">
         <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
       </div>
       <div id="calendar" class="grid grid-cols-7 gap-1 mt-1"></div>
 
-      <div class="mt-4 flex gap-3">
-        <button id="saveBtn" class="pill bg-blue-600 hover:bg-blue-700 text-white px-5 py-2">Save date</button>
-        <button id="clearBtn" class="pill bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2">Clear all</button>
-      </div>
-      <p class="text-xs text-slate-500 mt-2">Tip: you can’t pick a future date.</p>
+      <div class="tap-help text-xs text-slate-600 sm:hidden">Tip: Tap any past day to save it instantly. Saved days show a small blue dot.</div>
     </section>
 
     <!-- History -->
-    <section class="card bg-white rounded-2xl p-5 mt-6">
-      <h2 class="text-xl font-semibold">History</h2>
-      <div id="history" class="mt-4 space-y-3"></div>
+    <section class="card bg-white rounded-2xl p-4 sm:p-5 mt-4 mb-20 sm:mb-6">
+      <h2 class="text-lg sm:text-xl font-semibold">History</h2>
+      <div id="history" class="mt-3 space-y-2"></div>
     </section>
 
-    <footer class="text-center text-xs text-slate-500 my-8">
+    <footer class="text-center text-xs text-slate-500 my-6">
       Built for Varsha • Fully offline • Cookie‑only storage
     </footer>
   </main>
@@ -101,11 +109,12 @@
   <script>
     const COOKIE_NAME = 'vt_cycle_data';
     const COOKIE_DAYS = 400;
+    const PERIOD_LENGTH_DAYS = 5; // predicted period duration for shading
     const state = { cycles: [], selectedDate: null, view: currentYM() };
 
     function currentYM(){ const t=new Date(); return { y:t.getFullYear(), m:t.getMonth() }; }
 
-    // --- cookie helpers ---
+    // cookie helpers
     function setCookie(name, value, days){
       const expires = new Date(Date.now() + days*24*60*60*1000).toUTCString();
       const secure = location.protocol === 'https:' ? '; Secure' : '';
@@ -124,11 +133,9 @@
     }
 
     function saveData(){
-      if(state.cycles.length>12) state.cycles.splice(0, state.cycles.length-12);
+      if(state.cycles.length>18) state.cycles.splice(0, state.cycles.length-18); // keep a bit more history
       setCookie(COOKIE_NAME, JSON.stringify({ cycles: state.cycles }), COOKIE_DAYS);
-      renderStatus();
-      renderHistory();
-      renderCalendar();
+      renderAll();
     }
     function loadData(){
       const raw = getCookie(COOKIE_NAME);
@@ -136,77 +143,60 @@
       try {
         const obj = JSON.parse(raw);
         if(Array.isArray(obj.cycles)){
-          state.cycles = obj.cycles
-            .filter(Boolean)
-            .map(d=>fmtDateISO(d))
-            .sort((a,b)=> a.localeCompare(b));
+          state.cycles = obj.cycles.filter(Boolean).map(d=>fmtDateISO(d)).sort((a,b)=> a.localeCompare(b));
         }
       } catch {}
     }
 
-    // --- date utils ---
+    // date utils
     function fmtDateISO(d){ return new Date(d).toISOString().slice(0,10); }
     function fmtDateHuman(d){ const dd = new Date(d); return dd.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); }
     function daysBetween(a,b){ const ms=24*60*60*1000; return Math.floor((new Date(b)-new Date(a))/ms); }
 
-    function computeAvgCycle(){
-      if(state.cycles.length < 2) return 28;
-      const diffs = [];
-      for(let i=1;i<state.cycles.length;i++) diffs.push(daysBetween(state.cycles[i-1], state.cycles[i]));
-      const avg = Math.round(diffs.reduce((a,b)=>a+b,0)/diffs.length);
-      return Math.max(15, Math.min(60, avg));
+    // stats + predictions
+    function cycleDiffs(){
+      const diffs=[]; for(let i=1;i<state.cycles.length;i++){ diffs.push(daysBetween(state.cycles[i-1], state.cycles[i])); }
+      return diffs.filter(d=>Number.isFinite(d) && d>5 && d<80);
     }
-
-    function predictNextStart(){
-      if(!state.cycles.length) return null;
-      const avg = computeAvgCycle();
-      const last = new Date(state.cycles[state.cycles.length-1]);
-      last.setDate(last.getDate() + avg);
-      return fmtDateISO(last);
+    function computeAvgCycle(){ const d=cycleDiffs(); if(!d.length) return 28; return Math.round(d.reduce((a,b)=>a+b,0)/d.length); }
+    function computeStats(){
+      const d=cycleDiffs();
+      return {
+        avg: computeAvgCycle(),
+        min: d.length? Math.min(...d): null,
+        max: d.length? Math.max(...d): null,
+        count: state.cycles.length
+      };
     }
+    function predictNextStart(){ if(!state.cycles.length) return null; const avg=computeAvgCycle(); const last=new Date(state.cycles[state.cycles.length-1]); last.setDate(last.getDate()+avg); return fmtDateISO(last); }
+    function getUpcoming(n=3){ const list=[]; if(!state.cycles.length) return list; const avg=computeAvgCycle(); let cur=new Date(state.cycles[state.cycles.length-1]); for(let i=0;i<n;i++){ cur=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+avg); list.push(fmtDateISO(cur)); } return list; }
 
-    function getUpcoming(n=3){
-      const list = [];
-      if(!state.cycles.length) return list;
-      let cur = new Date(state.cycles[state.cycles.length-1]);
-      const avg = computeAvgCycle();
-      for(let i=0;i<n;i++){
-        cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate()+avg);
-        list.push(fmtDateISO(cur));
-      }
-      return list;
-    }
-
-    // --- fertility helpers ---
-    function buildFertilityWindows(nCycles=3){
-      const windows = [];
-      if(!state.cycles.length) return windows;
-      const avg = computeAvgCycle();
-      let start = new Date(state.cycles[state.cycles.length-1]);
+    // fertility windows
+    function buildFertilityWindows(nCycles=4){
+      const windows=[]; if(!state.cycles.length) return windows; const avg=computeAvgCycle(); let start=new Date(state.cycles[state.cycles.length-1]);
       for(let k=0;k<nCycles;k++){
-        const startK = new Date(start.getFullYear(), start.getMonth(), start.getDate() + k*avg);
-        const ov = new Date(startK.getFullYear(), startK.getMonth(), startK.getDate() + avg - 14);
-        const wStart = new Date(ov.getFullYear(), ov.getMonth(), ov.getDate() - 5); // fertile window start
-        const highStart = new Date(ov.getFullYear(), ov.getMonth(), ov.getDate() - 2);
-        const highEnd = new Date(ov); // ovulation day inclusive
-        const wEnd = new Date(ov.getFullYear(), ov.getMonth(), ov.getDate() + 1); // day after ovulation
-        windows.push({ wStart: fmtDateISO(wStart), highStart: fmtDateISO(highStart), highEnd: fmtDateISO(highEnd), wEnd: fmtDateISO(wEnd) });
+        const startK=new Date(start.getFullYear(),start.getMonth(),start.getDate()+k*avg);
+        const ov=new Date(startK.getFullYear(),startK.getMonth(),startK.getDate()+avg-14);
+        const wStart=new Date(ov.getFullYear(),ov.getMonth(),ov.getDate()-5);
+        const highStart=new Date(ov.getFullYear(),ov.getMonth(),ov.getDate()-2);
+        const highEnd=new Date(ov);
+        const wEnd=new Date(ov.getFullYear(),ov.getMonth(),ov.getDate()+1);
+        windows.push({ wStart:fmtDateISO(wStart), highStart:fmtDateISO(highStart), highEnd:fmtDateISO(highEnd), wEnd:fmtDateISO(wEnd), ov:fmtDateISO(ov) });
       }
       return windows;
     }
-
     function fertilityLabelFor(dateISO){
-      if(!state.cycles.length) return null;
-      const wins = buildFertilityWindows(4); // cover a few months ahead
-      for(const w of wins){
-        if(dateISO >= w.wStart && dateISO <= w.wEnd){
-          if(dateISO >= w.highStart && dateISO <= w.highEnd) return 'H';
-          return 'N';
-        }
-      }
+      if(!state.cycles.length) return null; const wins=buildFertilityWindows(5);
+      for(const w of wins){ if(dateISO>=w.wStart && dateISO<=w.wEnd){ if(dateISO>=w.highStart && dateISO<=w.highEnd) return 'H'; return 'N'; } }
       return 'L';
     }
 
+    // predicted period ranges (5 days from each predicted start)
+    function predictedPeriodRanges(nCycles=4){
+      const ranges=[]; const preds=getUpcoming(nCycles); preds.forEach(startISO=>{ const days=PERIOD_LENGTH_DAYS; for(let i=0;i<days;i++){ const d=new Date(startISO); d.setDate(d.getDate()+i); ranges.push(fmtDateISO(d)); } }); return new Set(ranges);
+    }
+
+    // renderers
     function renderStatus(){
       const avg = computeAvgCycle();
       const next = predictNextStart();
@@ -227,12 +217,21 @@
       }
       document.getElementById('statusLine').textContent = status;
 
-      // Upcoming list
+      // stats pills
+      const stats = computeStats();
+      const row = document.getElementById('statsRow');
+      row.innerHTML = '';
+      const pills = [];
+      pills.push(`<span class="stat-pill">Entries: ${stats.count}</span>`);
+      if(stats.min!==null) pills.push(`<span class="stat-pill">Shortest: ${stats.min}d</span>`);
+      if(stats.max!==null) pills.push(`<span class="stat-pill">Longest: ${stats.max}d</span>`);
+      pills.push(`<span class="stat-pill">Avg: ${stats.avg}d</span>`);
+      row.innerHTML = pills.join('');
+
+      // upcoming list
       const ul = document.getElementById('upcomingList');
-      ul.innerHTML = '';
-      const upcoming = getUpcoming(3);
+      ul.innerHTML=''; const upcoming=getUpcoming(3); const todayISO=fmtDateISO(today);
       if(!upcoming.length){ ul.innerHTML = '<li class="text-slate-500 text-sm">Add at least one date.</li>'; return; }
-      const todayISO = fmtDateISO(today);
       upcoming.forEach((d,i)=>{
         const days = Math.max(0, daysBetween(todayISO, d));
         const li = document.createElement('li');
@@ -243,87 +242,71 @@
     }
 
     function renderHistory(){
-      const wrap = document.getElementById('history');
-      wrap.innerHTML = '';
-      if(!state.cycles.length){
-        wrap.innerHTML = '<div class="text-slate-600 text-sm">No cycles yet.</div>';
-        return;
-      }
+      const wrap = document.getElementById('history'); wrap.innerHTML='';
+      if(!state.cycles.length){ wrap.innerHTML = '<div class="text-slate-600 text-sm">No cycles yet.</div>'; return; }
       state.cycles.forEach((d, i)=>{
         const div = document.createElement('div');
-        div.className = 'bg-blue-50 border border-blue-200 rounded-2xl p-4 flex justify-between';
+        div.className = 'bg-blue-50 border border-blue-200 rounded-2xl p-3 flex justify-between text-sm';
         div.innerHTML = `<div>Cycle ${i+1}: ${fmtDateHuman(d)}</div>`;
         wrap.appendChild(div);
       });
     }
 
     function renderCalendar(){
-      const y = state.view.y, m = state.view.m;
-      const cal = document.getElementById('calendar');
-      cal.innerHTML = '';
+      const y=state.view.y, m=state.view.m; const cal=document.getElementById('calendar'); cal.innerHTML='';
       document.getElementById('monthLabel').textContent = new Date(y, m, 1).toLocaleDateString(undefined,{month:'long', year:'numeric'});
 
       const firstDow = new Date(y, m, 1).getDay();
       const daysInMonth = new Date(y, m+1, 0).getDate();
       for(let i=0;i<firstDow;i++) cal.appendChild(document.createElement('div'));
-      const today = new Date();
+
+      const todayISO = fmtDateISO(new Date());
+      const predPeriods = predictedPeriodRanges(5);
+      const wins = buildFertilityWindows(6);
+      const ovSet = new Set(wins.map(w=>w.ov));
+
       for(let d=1; d<=daysInMonth; d++){
         const dateISO = fmtDateISO(new Date(y, m, d));
         const cell = document.createElement('div');
-        const isFuture = new Date(dateISO) > new Date(fmtDateISO(today));
+        const isFuture = new Date(dateISO) > new Date(todayISO);
         const isSaved = state.cycles.includes(dateISO);
         const label = fertilityLabelFor(dateISO) || '';
-        cell.className = 'calendar-day text-center p-2 rounded hover:bg-blue-100' + (isSaved?' saved':'');
-        cell.textContent = d;
-        if(label){
-          const b = document.createElement('div');
-          b.className = `badge ${label}`;
-          b.textContent = label;
-          b.title = label === 'H' ? 'High likelihood' : label === 'N' ? 'Normal likelihood' : 'Low likelihood';
-          cell.appendChild(b);
-        }
-        if(isFuture){ cell.classList.add('opacity-40', 'cursor-not-allowed'); }
+        cell.className = 'calendar-day rounded hover:bg-blue-100' + (isSaved?' saved':'');
+        if(predPeriods.has(dateISO)) cell.classList.add('pred-period');
+        if(ovSet.has(dateISO)) cell.classList.add('ov-dot');
+
+        const num = document.createElement('div'); num.textContent = d; num.className='text-sm sm:text-base';
+        cell.appendChild(num);
+
+        if(label){ const b=document.createElement('div'); b.className=`badge ${label}`; b.textContent=label; b.title = label==='H'?'High likelihood':label==='N'?'Normal likelihood':'Low likelihood'; cell.appendChild(b); }
+        if(isFuture){ cell.classList.add('opacity-40','cursor-not-allowed'); }
         if(state.selectedDate === dateISO) cell.classList.add('selected');
+
+        // Quick-add on tap
         cell.addEventListener('click', ()=>{
-          if(isFuture){ alert('You can\'t pick a future date.'); return; }
-          document.querySelectorAll('.calendar-day').forEach(c=>c.classList.remove('selected'));
-          cell.classList.add('selected');
-          state.selectedDate = dateISO;
+          if(isFuture){ alert("You can't pick a future date."); return; }
+          // Save instantly if not saved
+          if(!state.cycles.includes(dateISO)){
+            state.cycles.push(dateISO); state.cycles.sort((a,b)=>a.localeCompare(b)); saveData();
+          } else {
+            // If already saved, just select for visual feedback
+            state.selectedDate = dateISO; renderCalendar();
+          }
         });
         cal.appendChild(cell);
       }
     }
 
-    // --- controls ---
-    document.getElementById('prevMonth').addEventListener('click', ()=>{
-      state.view.m -= 1; if(state.view.m < 0){ state.view.m = 11; state.view.y -= 1; } renderCalendar();
-    });
-    document.getElementById('nextMonth').addEventListener('click', ()=>{
-      state.view.m += 1; if(state.view.m > 11){ state.view.m = 0; state.view.y += 1; } renderCalendar();
-    });
+    // controls
+    document.getElementById('prevMonth').addEventListener('click', ()=>{ state.view.m -= 1; if(state.view.m < 0){ state.view.m = 11; state.view.y -= 1; } renderCalendar(); });
+    document.getElementById('nextMonth').addEventListener('click', ()=>{ state.view.m += 1; if(state.view.m > 11){ state.view.m = 0; state.view.y += 1; } renderCalendar(); });
     document.getElementById('todayBtn').addEventListener('click', ()=>{ state.view = currentYM(); renderCalendar(); });
 
-    document.getElementById('saveBtn').addEventListener('click', ()=>{
-      if(!state.selectedDate){ alert('Please pick a date.'); return; }
-      if(!state.cycles.includes(state.selectedDate)) state.cycles.push(state.selectedDate);
-      state.cycles.sort((a,b)=> a.localeCompare(b));
-      saveData();
-    });
-
-    document.getElementById('clearBtn').addEventListener('click', ()=>{
-      if(!confirm('Clear all saved data?')) return;
-      state.cycles = []; state.selectedDate = null;
-      delCookie(COOKIE_NAME);
-      renderStatus();
-      renderHistory();
-      renderCalendar();
-    });
+    function renderAll(){ renderStatus(); renderHistory(); renderCalendar(); }
 
     // init
     loadData();
-    renderStatus();
-    renderHistory();
-    renderCalendar();
+    renderAll();
   </script>
 </body>
 </html>
