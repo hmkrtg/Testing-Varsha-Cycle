@@ -8,13 +8,14 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="manifest" href="/manifest.webmanifest">
   <style>
-    :root{ --blue:#2563eb; --blue50:#eff6ff; --red:#ef4444; --green:#16a34a; }
+    :root{ --blue:#2563eb; --blue50:#eff6ff; --red:#ef4444; --green:#16a34a; --neutral:#3b82f6; }
     .card { box-shadow: 0 10px 25px rgba(0,0,0,.08); }
     .pill { border-radius: 9999px; }
     .calendar-day { cursor: pointer; position: relative; min-height: 46px; display:flex; align-items:center; justify-content:center; }
     @media (max-width: 420px){ .calendar-day{ min-height: 40px; } }
     .calendar-day.selected { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 10px; }
     .calendar-day.saved::after { content: ""; position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); width: 6px; height: 6px; border-radius: 9999px; background: var(--blue); }
+    /* Letters (optional) */
     .badge { position:absolute; top:2px; left:4px; font-size:10px; line-height:1; padding:2px 4px; border-radius:9999px; background:#e5e7eb; color:#111827; }
     .badge.H { background:#dcfce7; }
     .badge.N { background:#e0e7ff; }
@@ -23,6 +24,10 @@
     .pred-period { background: rgba(239,68,68,.10); border-radius: 10px; }
     /* Predicted ovulation dot */
     .ov-dot::before{ content:""; position:absolute; right:6px; top:6px; width:6px; height:6px; border-radius:9999px; background: var(--green); }
+    /* Minimal dots instead of letters (default) */
+    .fert-dot { position:absolute; top:6px; left:6px; width:6px; height:6px; border-radius:9999px; opacity:.9; }
+    .fert-dot.high { background: var(--green); }
+    .fert-dot.norm { background: var(--neutral); }
     /* Mobile layout tweaks */
     .stat-pill{ background:var(--blue50); border:1px solid #bfdbfe; padding:.4rem .6rem; border-radius:9999px; font-size:.85rem; }
     .tap-help{ position:sticky; bottom:0; left:0; right:0; background:white; border-top:1px solid #e5e7eb; padding:.5rem .75rem; }
@@ -69,11 +74,11 @@
       <div class="mt-3 text-xs text-slate-600">
         <div class="font-semibold mb-1">Fertility legend</div>
         <div class="flex flex-wrap gap-3 items-center">
-          <span class="badge H">H</span><span>High (around ovulation)</span>
-          <span class="badge N">N</span><span>Normal (fertile window)</span>
-          <span class="badge L">L</span><span>Low (outside fertile window)</span>
+          <span class="inline-block w-2 h-2 rounded-full" style="background:#16a34a"></span><span>High (around ovulation)</span>
+          <span class="inline-block w-2 h-2 rounded-full" style="background:#3b82f6"></span><span>Fertile window</span>
+          <span class="inline-block w-2 h-2 rounded-full bg-slate-300"></span><span>None shown = Low</span>
         </div>
-        <p class="mt-2">Note: This is a simple estimate using your average cycle length, assuming ovulation ~14 days before the next period. Not medical advice.</p>
+        <p class="mt-2">Note: Simple estimate using your average cycle length, assuming ovulation ~14 days before the next period. Not medical advice.</p>
       </div>
     </section>
 
@@ -85,7 +90,9 @@
           <div id="monthLabel" class="min-w-[160px] text-center font-medium text-sm sm:text-base"></div>
           <button id="nextMonth" class="pill px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm">▶</button>
         </div>
-        <div class="text-xs text-slate-500">Tap a day to save as start</div>
+        <div class="flex items-center gap-3 text-xs text-slate-600">
+          <label class="flex items-center gap-1 cursor-pointer"><input id="toggleLabels" type="checkbox" class="align-middle"> Show letters (L/N/H)</label>
+        </div>
       </div>
 
       <div class="grid grid-cols-7 gap-1 mt-3 text-center text-[10px] sm:text-xs text-slate-500">
@@ -93,7 +100,8 @@
       </div>
       <div id="calendar" class="grid grid-cols-7 gap-1 mt-1"></div>
 
-      <div class="tap-help text-xs text-slate-600 sm:hidden">Tip: Tap any past day to save it instantly. Saved days show a small blue dot.</div>
+      <div id="dayInfo" class="mt-3 text-xs text-slate-600"></div>
+      <div class="tap-help text-xs text-slate-600 sm:hidden">Tip: Tap any past day to **save/unsave** it. Saved days show a small blue dot.</div>
     </section>
 
     <!-- History -->
@@ -111,7 +119,7 @@
     const COOKIE_NAME = 'vt_cycle_data';
     const COOKIE_DAYS = 400;
     const PERIOD_LENGTH_DAYS = 5; // predicted period duration for shading
-    const state = { cycles: [], selectedDate: null, view: currentYM() };
+    const state = { cycles: [], selectedDate: null, view: currentYM(), showLabels: false };
 
     function currentYM(){ const t=new Date(); return { y:t.getFullYear(), m:t.getMonth() }; }
 
@@ -134,8 +142,8 @@
     }
 
     function saveData(){
-      if(state.cycles.length>18) state.cycles.splice(0, state.cycles.length-18); // keep a bit more history
-      setCookie(COOKIE_NAME, JSON.stringify({ cycles: state.cycles }), COOKIE_DAYS);
+      if(state.cycles.length>18) state.cycles.splice(0, state.cycles.length-18);
+      setCookie(COOKIE_NAME, JSON.stringify({ cycles: state.cycles, showLabels: state.showLabels }), COOKIE_DAYS);
       renderAll();
     }
     function loadData(){
@@ -143,9 +151,10 @@
       if(!raw) return;
       try {
         const obj = JSON.parse(raw);
-        if(Array.isArray(obj.cycles)){
+        if(obj && Array.isArray(obj.cycles)){
           state.cycles = obj.cycles.filter(Boolean).map(d=>fmtDateISO(d)).sort((a,b)=> a.localeCompare(b));
         }
+        if(typeof obj?.showLabels === 'boolean') state.showLabels = obj.showLabels;
       } catch {}
     }
 
@@ -155,20 +164,9 @@
     function daysBetween(a,b){ const ms=24*60*60*1000; return Math.floor((new Date(b)-new Date(a))/ms); }
 
     // stats + predictions
-    function cycleDiffs(){
-      const diffs=[]; for(let i=1;i<state.cycles.length;i++){ diffs.push(daysBetween(state.cycles[i-1], state.cycles[i])); }
-      return diffs.filter(d=>Number.isFinite(d) && d>5 && d<80);
-    }
+    function cycleDiffs(){ const diffs=[]; for(let i=1;i<state.cycles.length;i++){ diffs.push(daysBetween(state.cycles[i-1], state.cycles[i])); } return diffs.filter(d=>Number.isFinite(d) && d>5 && d<80); }
     function computeAvgCycle(){ const d=cycleDiffs(); if(!d.length) return 28; return Math.round(d.reduce((a,b)=>a+b,0)/d.length); }
-    function computeStats(){
-      const d=cycleDiffs();
-      return {
-        avg: computeAvgCycle(),
-        min: d.length? Math.min(...d): null,
-        max: d.length? Math.max(...d): null,
-        count: state.cycles.length
-      };
-    }
+    function computeStats(){ const d=cycleDiffs(); return { avg: computeAvgCycle(), min: d.length? Math.min(...d): null, max: d.length? Math.max(...d): null, count: state.cycles.length }; }
     function predictNextStart(){ if(!state.cycles.length) return null; const avg=computeAvgCycle(); const last=new Date(state.cycles[state.cycles.length-1]); last.setDate(last.getDate()+avg); return fmtDateISO(last); }
     function getUpcoming(n=3){ const list=[]; if(!state.cycles.length) return list; const avg=computeAvgCycle(); let cur=new Date(state.cycles[state.cycles.length-1]); for(let i=0;i<n;i++){ cur=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+avg); list.push(fmtDateISO(cur)); } return list; }
 
@@ -240,6 +238,11 @@
         li.innerHTML = `<div class="text-xs text-slate-600">Prediction ${i+1}</div><div class="font-semibold">${fmtDateHuman(d)}</div><div class="text-xs text-slate-600">in ${days} day${days===1?'':'s'}</div>`;
         ul.appendChild(li);
       });
+
+      // init toggle state
+      const toggle = document.getElementById('toggleLabels');
+      toggle.checked = !!state.showLabels;
+      toggle.onchange = () => { state.showLabels = toggle.checked; saveData(); };
     }
 
     function renderHistory(){
@@ -279,20 +282,34 @@
         const num = document.createElement('div'); num.textContent = d; num.className='text-sm sm:text-base';
         cell.appendChild(num);
 
-        if(label){ const b=document.createElement('div'); b.className=`badge ${label}`; b.textContent=label; b.title = label==='H'?'High likelihood':label==='N'?'Normal likelihood':'Low likelihood'; cell.appendChild(b); }
+        // Dots by default (no letters). High = green dot, Normal = blue dot, Low = none.
+        if(label === 'H'){
+          const dot = document.createElement('div'); dot.className = 'fert-dot high'; cell.appendChild(dot);
+        } else if(label === 'N'){
+          const dot = document.createElement('div'); dot.className = 'fert-dot norm'; cell.appendChild(dot);
+        }
+        // Optional letters if toggled on
+        if(state.showLabels && label){ const b=document.createElement('div'); b.className=`badge ${label}`; b.textContent=label; b.title = label==='H'?'High likelihood':label==='N'?'Normal likelihood':'Low likelihood'; cell.appendChild(b); }
+
         if(isFuture){ cell.classList.add('opacity-40','cursor-not-allowed'); }
         if(state.selectedDate === dateISO) cell.classList.add('selected');
 
-        // Quick-add on tap
         cell.addEventListener('click', ()=>{
           if(isFuture){ alert("You can't pick a future date."); return; }
-          // Save instantly if not saved
-          if(!state.cycles.includes(dateISO)){
-            state.cycles.push(dateISO); state.cycles.sort((a,b)=>a.localeCompare(b)); saveData();
-          } else {
-            // If already saved, just select for visual feedback
-            state.selectedDate = dateISO; renderCalendar();
+          state.selectedDate = dateISO;
+          const idx = state.cycles.indexOf(dateISO);
+          if(idx === -1){ // save
+            state.cycles.push(dateISO); state.cycles.sort((a,b)=>a.localeCompare(b));
+          } else { // unsave (toggle off)
+            state.cycles.splice(idx, 1);
           }
+          saveData();
+          // Info row update
+          const info = document.getElementById('dayInfo');
+          const fertilityText = label === 'H' ? 'High' : label === 'N' ? 'Normal' : 'Low';
+          const isPredPeriod = predPeriods.has(dateISO);
+          const savedNow = idx === -1; // if we just added
+          info.textContent = `${new Date(dateISO).toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'})}: ${savedNow? 'Saved' : 'Removed'} • Fertility ${fertilityText}${isPredPeriod ? ' • Predicted period' : ''}`;
         });
         cal.appendChild(cell);
       }
@@ -317,7 +334,7 @@
         .catch(err => console.error('Service Worker registration failed:', err));
     });
   }
-</script>
+  </script>
 
 </body>
 </html>
