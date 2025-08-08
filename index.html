@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Varsha’s Simple Cycle Tracker</title>
-  <meta name="description" content="Ridiculously simple calendar-based menstrual tracker for Varsha. Cookie storage only." />
+  <title>Varsha’s Cycle Tracker</title>
+  <meta name="description" content="Simple calendar-based menstrual tracker for Varsha. Cookie storage only. Now with 3‑month predictions." />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .card { box-shadow: 0 10px 25px rgba(0,0,0,.08); }
@@ -41,6 +41,12 @@
           <div class="text-sm text-slate-600">Days until next</div>
           <div id="daysUntil" class="text-2xl font-bold">—</div>
         </div>
+      </div>
+
+      <!-- NEW: Upcoming predictions -->
+      <div class="mt-5">
+        <h3 class="font-semibold">Upcoming predictions (next 3)</h3>
+        <ul id="upcomingList" class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2"></ul>
       </div>
     </section>
 
@@ -105,7 +111,6 @@
     }
 
     function saveData(){
-      // keep last 12 to fit cookie size
       if(state.cycles.length>12) state.cycles.splice(0, state.cycles.length-12);
       setCookie(COOKIE_NAME, JSON.stringify({ cycles: state.cycles }), COOKIE_DAYS);
       renderStatus();
@@ -136,7 +141,7 @@
       const diffs = [];
       for(let i=1;i<state.cycles.length;i++) diffs.push(daysBetween(state.cycles[i-1], state.cycles[i]));
       const avg = Math.round(diffs.reduce((a,b)=>a+b,0)/diffs.length);
-      return Math.max(15, Math.min(60, avg)); // keep within a sane range
+      return Math.max(15, Math.min(60, avg));
     }
 
     function predictNextStart(){
@@ -145,6 +150,18 @@
       const last = new Date(state.cycles[state.cycles.length-1]);
       last.setDate(last.getDate() + avg);
       return fmtDateISO(last);
+    }
+
+    function getUpcoming(n=3){
+      const list = [];
+      if(!state.cycles.length) return list;
+      let cur = new Date(state.cycles[state.cycles.length-1]);
+      const avg = computeAvgCycle();
+      for(let i=0;i<n;i++){
+        cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate()+avg);
+        list.push(fmtDateISO(cur));
+      }
+      return list;
     }
 
     function renderStatus(){
@@ -166,6 +183,20 @@
         document.getElementById('daysUntil').textContent = '—';
       }
       document.getElementById('statusLine').textContent = status;
+
+      // Upcoming list
+      const ul = document.getElementById('upcomingList');
+      ul.innerHTML = '';
+      const upcoming = getUpcoming(3);
+      if(!upcoming.length){ ul.innerHTML = '<li class="text-slate-500 text-sm">Add at least one date.</li>'; return; }
+      const todayISO = fmtDateISO(today);
+      upcoming.forEach((d,i)=>{
+        const days = Math.max(0, daysBetween(todayISO, d));
+        const li = document.createElement('li');
+        li.className = 'bg-blue-50 border border-blue-200 rounded-2xl p-3';
+        li.innerHTML = `<div class="text-xs text-slate-600">Prediction ${i+1}</div><div class="font-semibold">${fmtDateHuman(d)}</div><div class="text-xs text-slate-600">in ${days} day${days===1?'':'s'}</div>`;
+        ul.appendChild(li);
+      });
     }
 
     function renderHistory(){
@@ -191,7 +222,6 @@
 
       const firstDow = new Date(y, m, 1).getDay();
       const daysInMonth = new Date(y, m+1, 0).getDate();
-      // leading blanks
       for(let i=0;i<firstDow;i++) cal.appendChild(document.createElement('div'));
       const today = new Date();
       for(let d=1; d<=daysInMonth; d++){
