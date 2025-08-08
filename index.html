@@ -4,15 +4,19 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Varsha’s Cycle Tracker</title>
-  <meta name="description" content="Simple calendar-based menstrual tracker for Varsha. Cookie storage only. Now with 3‑month predictions." />
+  <meta name="description" content="Simple calendar tracker for Varsha with 3‑month predictions and fertility likelihood labels (L/N/H). Cookie storage only." />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .card { box-shadow: 0 10px 25px rgba(0,0,0,.08); }
     .pill { border-radius: 9999px; }
-    .calendar-day { cursor: pointer; }
-    .calendar-day.selected { background-color: #60a5fa; color: white; border-radius: 9999px; }
+    .calendar-day { cursor: pointer; position: relative; }
+    .calendar-day.selected { background-color: #60a5fa; color: white; border-radius: 12px; }
     .calendar-day.saved { position: relative; }
     .calendar-day.saved::after { content: ""; position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); width: 6px; height: 6px; border-radius: 9999px; background: #2563eb; }
+    .badge { position:absolute; top:2px; left:4px; font-size:10px; line-height:1; padding:2px 4px; border-radius:9999px; background:#e5e7eb; color:#111827; }
+    .badge.H { background:#dcfce7; }
+    .badge.N { background:#e0e7ff; }
+    .badge.L { background:#f3f4f6; }
   </style>
 </head>
 <body class="bg-blue-50 text-slate-800">
@@ -43,10 +47,19 @@
         </div>
       </div>
 
-      <!-- NEW: Upcoming predictions -->
       <div class="mt-5">
         <h3 class="font-semibold">Upcoming predictions (next 3)</h3>
         <ul id="upcomingList" class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2"></ul>
+      </div>
+
+      <div class="mt-4 text-xs text-slate-600">
+        <div class="font-semibold mb-1">Fertility legend</div>
+        <div class="flex gap-3 items-center">
+          <span class="badge H">H</span><span>High (around ovulation)</span>
+          <span class="badge N">N</span><span>Normal (fertile window)</span>
+          <span class="badge L">L</span><span>Low (outside fertile window)</span>
+        </div>
+        <p class="mt-2">Note: This is a simple estimate using your average cycle length, assuming ovulation ~14 days before the next period. It’s not medical advice or birth control.</p>
       </div>
     </section>
 
@@ -164,6 +177,36 @@
       return list;
     }
 
+    // --- fertility helpers ---
+    function buildFertilityWindows(nCycles=3){
+      const windows = [];
+      if(!state.cycles.length) return windows;
+      const avg = computeAvgCycle();
+      let start = new Date(state.cycles[state.cycles.length-1]);
+      for(let k=0;k<nCycles;k++){
+        const startK = new Date(start.getFullYear(), start.getMonth(), start.getDate() + k*avg);
+        const ov = new Date(startK.getFullYear(), startK.getMonth(), startK.getDate() + avg - 14);
+        const wStart = new Date(ov.getFullYear(), ov.getMonth(), ov.getDate() - 5); // fertile window start
+        const highStart = new Date(ov.getFullYear(), ov.getMonth(), ov.getDate() - 2);
+        const highEnd = new Date(ov); // ovulation day inclusive
+        const wEnd = new Date(ov.getFullYear(), ov.getMonth(), ov.getDate() + 1); // day after ovulation
+        windows.push({ wStart: fmtDateISO(wStart), highStart: fmtDateISO(highStart), highEnd: fmtDateISO(highEnd), wEnd: fmtDateISO(wEnd) });
+      }
+      return windows;
+    }
+
+    function fertilityLabelFor(dateISO){
+      if(!state.cycles.length) return null;
+      const wins = buildFertilityWindows(4); // cover a few months ahead
+      for(const w of wins){
+        if(dateISO >= w.wStart && dateISO <= w.wEnd){
+          if(dateISO >= w.highStart && dateISO <= w.highEnd) return 'H';
+          return 'N';
+        }
+      }
+      return 'L';
+    }
+
     function renderStatus(){
       const avg = computeAvgCycle();
       const next = predictNextStart();
@@ -229,8 +272,16 @@
         const cell = document.createElement('div');
         const isFuture = new Date(dateISO) > new Date(fmtDateISO(today));
         const isSaved = state.cycles.includes(dateISO);
+        const label = fertilityLabelFor(dateISO) || '';
         cell.className = 'calendar-day text-center p-2 rounded hover:bg-blue-100' + (isSaved?' saved':'');
         cell.textContent = d;
+        if(label){
+          const b = document.createElement('div');
+          b.className = `badge ${label}`;
+          b.textContent = label;
+          b.title = label === 'H' ? 'High likelihood' : label === 'N' ? 'Normal likelihood' : 'Low likelihood';
+          cell.appendChild(b);
+        }
         if(isFuture){ cell.classList.add('opacity-40', 'cursor-not-allowed'); }
         if(state.selectedDate === dateISO) cell.classList.add('selected');
         cell.addEventListener('click', ()=>{
