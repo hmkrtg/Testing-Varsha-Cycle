@@ -1,5 +1,5 @@
   {
-  "name": "Varsha’s Cycle Tracker",
+  "name": "Cycle Tracker",
   "short_name": "Tracker",
   "description": "Simple, offline-first menstrual tracker with predictions and fertility labels.",
   "start_url": "/",
